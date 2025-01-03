@@ -1,14 +1,22 @@
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, Request
 from pydantic import BaseModel
 from typing import List, Optional
 import re
+import logging
+import json
 
 app = FastAPI()
 
+# Konfiguracja loggera
+logger = logging.getLogger("uvicorn.access")
+logger.setLevel(logging.INFO)
+handler = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 class Instruction(BaseModel):
     instruction: str
-
 
 TERRAIN_MAP = [
     ["Punkt startowy", "Trawa", "Drzewo", "Dom"],
@@ -18,7 +26,6 @@ TERRAIN_MAP = [
 ]
 
 API_KEY = "7d03adb9-c164-497d-be2b-e42ee7a5a62b"
-
 
 def parse_instruction(instruction: str) -> List[str]:
     instruction = instruction.lower()
@@ -52,7 +59,6 @@ def parse_instruction(instruction: str) -> List[str]:
 
     return moves
 
-
 def get_final_position(moves: List[str]) -> (int, int):
     row, col = 0, 0  # Startujemy z (0,0)
     for move in moves:
@@ -66,11 +72,36 @@ def get_final_position(moves: List[str]) -> (int, int):
             col += 1
     return row, col
 
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    # Odczytaj ciało żądania
+    try:
+        body_bytes = await request.body()
+        body = body_bytes.decode('utf-8')
+    except Exception:
+        body = "<nie można odczytać ciała żądania>"
+
+    # Skopiuj nagłówki i usuń klucz API z logów
+    headers = dict(request.headers)
+    headers.pop("apikey", None)  # Usuń 'apikey' z nagłówków
+
+    # Logowanie szczegółów żądania
+    logger.info(
+        f"Request: {request.method} {request.url}\n"
+        f"Headers: {json.dumps(headers)}\n"
+        f"Body: {body}"
+    )
+
+    response = await call_next(request)
+
+    # Logowanie statusu odpowiedzi
+    logger.info(f"Response status: {response.status_code}")
+
+    return response
 
 @app.get("/")
 def read_root():
     return {"message": "API Map działa poprawnie!"}
-
 
 @app.post("/map/")
 def process_map_instruction(instr: Instruction, apikey: Optional[str] = Header(None)):
@@ -91,8 +122,7 @@ def process_map_instruction(instr: Instruction, apikey: Optional[str] = Header(N
 
     return {"description": description}
 
-
-# Opcjonalny endpoint bez ukośnika
+# Opcjonalny endpoint bez ukośnika - wykorzystuje ten sam handler co /map/
 @app.post("/map")
 def process_map_instruction_no_slash(instr: Instruction, apikey: Optional[str] = Header(None)):
     return process_map_instruction(instr, apikey)
