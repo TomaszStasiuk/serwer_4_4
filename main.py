@@ -9,27 +9,21 @@ import os
 
 load_dotenv()  # Wczytuje zmienne z .env
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-print("Dostępne zmienne środowiskowe:")
-for key, value in os.environ.items():
-    print(f"{key}: {value}")
-print(os.environ)
-
 if not OPENAI_API_KEY:
-    print("Nie udało się wczytać zmiennej OPENAI_API_KEY. Sprawdź konfigurację.")
-else:
-    print("Zmienne środowiskowa OPENAI_API_KEY została poprawnie załadowana.")
-client = openai.Client(api_key=OPENAI_API_KEY)
+    raise ValueError("Nie udało się wczytać zmiennej OPENAI_API_KEY. Sprawdź konfigurację.")
 
 # FastAPI setup
 app = FastAPI()
 
 # Konfiguracja loggera
 logger = logging.getLogger("app_logger")
-logger.setLevel(logging.DEBUG)  # Zmieniono na DEBUG, aby logować więcej szczegółów
+logger.setLevel(logging.DEBUG)  # DEBUG pozwala na bardziej szczegółowe logowanie
 handler = logging.StreamHandler()
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
+
+logger.info("Zmienne środowiskowa OPENAI_API_KEY została poprawnie załadowana.")
 
 # Model danych wejściowych
 class Instruction(BaseModel):
@@ -73,7 +67,7 @@ def generate_prompt(instruction: str) -> str:
 def ask_chatgpt_with_prompt(instruction: str) -> str:
     try:
         prompt = generate_prompt(instruction)
-        logger.info(f"Wysłanie prompta do OpenAI API: {prompt}")
+        logger.info("Wysyłanie prompta do OpenAI API...")
         response = client.chat_completions.create(
             model="gpt-4",
             messages=[
@@ -107,20 +101,21 @@ def read_root():
 # Endpoint obsługujący mapę
 @app.post("/map/")
 def process_map_instruction(instr: Instruction, apikey: Optional[str] = Header(None)):
-    logger.info(f"Żądanie otrzymane z instrukcją: {instr.instruction}")
+    logger.info(f"Żądanie z instrukcją: {instr.instruction}")
     if apikey != API_KEY:
         logger.warning("Nieprawidłowy klucz API!")
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    # Zapytanie do ChatGPT
+    logger.info("Wywołanie funkcji ask_chatgpt_with_prompt...")
     description = ask_chatgpt_with_prompt(instr.instruction)
     if "Błąd" in description:
         logger.error(f"Błąd w odpowiedzi: {description}")
         raise HTTPException(status_code=500, detail=description)
 
     try:
+        logger.info(f"Parsowanie odpowiedzi: {description}")
         result = json.loads(description)
-        logger.info(f"Przetworzona odpowiedź JSON: {result}")
+        logger.info(f"Zwracana odpowiedź: {result}")
         return result
     except json.JSONDecodeError as json_error:
         logger.error(f"Błąd dekodowania JSON: {json_error}")
