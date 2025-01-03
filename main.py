@@ -1,65 +1,58 @@
-# main.py
-
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
+import re
 
 app = FastAPI()
 
 
-# Definicja modelu danych wejściowych
 class Instruction(BaseModel):
     instruction: str
 
 
-# Mapa 4x4 z opisami pól (maksymalnie 2 słowa)
 TERRAIN_MAP = [
     ["Punkt startowy", "Trawa", "Drzewo", "Dom"],
-    ["Łąka", "Wiatrak", "Bagno", "Most"],
-    ["Ruiny", "Skały", "Bagno", "Las"],
-    ["Góry", "Pszczoły", "Samochód", "Jaskinia"]
+    ["Trawa", "Wiatrak", "Trawa", "Trawa"],
+    ["Trawa", "Trawa", "Skały", "Las"],
+    ["Góry", "Góry", "Samochód", "Jaskinia"]
 ]
 
+API_KEY = "7d03adb9-c164-497d-be2b-e42ee7a5a62b"
 
-# Funkcja do parsowania instrukcji ruchu
+
 def parse_instruction(instruction: str) -> List[str]:
-    """
-    Parsuje instrukcję ruchu z języka naturalnego na listę kierunków.
-    Obsługuje frazy takie jak "w prawo", "w lewo", "w dół", "w górę".
-    """
     instruction = instruction.lower()
     moves = []
 
-    # Słownik mapujący słowa na kierunki
     direction_map = {
         "prawo": "RIGHT",
         "lewo": "LEFT",
         "dół": "DOWN",
-        "dol": "DOWN",  # alternatywna forma
+        "dol": "DOWN",
         "górę": "UP",
-        "gora": "UP",  # alternatywna forma
-        "gore": "UP"  # alternatywna forma
+        "gora": "UP",
+        "gore": "UP"
     }
 
-    # Rozbij instrukcję na słowa
-    words = instruction.split()
+    # Znajdź wszystkie wystąpienia liczebników i kierunków
+    pattern = r'(\d+)\s+(razy\s+)?(prawo|lewo|dół|dol|górę|gora|gore)'
+    matches = re.findall(pattern, instruction)
 
-    # Iteruj przez słowa i mapuj na kierunki
-    for i in range(len(words)):
-        word = words[i]
-        if word in direction_map:
-            moves.append(direction_map[word])
-        # Opcjonalnie: obsługa liczebników, np. "dwa razy w prawo"
-        elif word.isdigit() and i + 2 < len(words):
-            num = int(word)
-            next_word = words[i + 2]
-            if next_word in direction_map:
-                moves.extend([direction_map[next_word]] * num)
+    for match in matches:
+        count = int(match[0])
+        direction = match[2]
+        moves.extend([direction_map[direction]] * count)
+
+    # Dodaj pojedyncze kierunki bez liczebników
+    for direction in direction_map.keys():
+        if direction in instruction:
+            # Unikaj podwójnego dodawania jeśli już zostały dodane przez liczebnik
+            if not re.search(r'\d+\s+razy\s+' + direction, instruction):
+                moves.append(direction_map[direction])
 
     return moves
 
 
-# Funkcja do określenia finalnej pozycji
 def get_final_position(moves: List[str]) -> (int, int):
     row, col = 0, 0  # Startujemy z (0,0)
     for move in moves:
@@ -74,15 +67,16 @@ def get_final_position(moves: List[str]) -> (int, int):
     return row, col
 
 
-# Endpoint główny
 @app.get("/")
 def read_root():
     return {"message": "API Map działa poprawnie!"}
 
 
-# Endpoint do przetwarzania instrukcji ruchu
 @app.post("/map/")
-def process_map_instruction(instr: Instruction):
+def process_map_instruction(instr: Instruction, apikey: Optional[str] = Header(None)):
+    if apikey != API_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     moves = parse_instruction(instr.instruction)
     if not moves:
         raise HTTPException(status_code=400, detail="Nie rozpoznano żadnych ruchów w instrukcji.")
@@ -96,3 +90,9 @@ def process_map_instruction(instr: Instruction):
         description = ' '.join(description_words[:2])
 
     return {"description": description}
+
+
+# Opcjonalny endpoint bez ukośnika
+@app.post("/map")
+def process_map_instruction_no_slash(instr: Instruction, apikey: Optional[str] = Header(None)):
+    return process_map_instruction(instr, apikey)
