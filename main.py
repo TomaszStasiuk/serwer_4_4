@@ -4,10 +4,18 @@ from typing import Optional
 import logging
 import openai
 import json
+from dotenv import load_dotenv
 import os
 
-# Konfiguracja OpenAI API
+load_dotenv()  # Wczytuje zmienne z .env
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+print(os.environ)
+
+if not OPENAI_API_KEY:
+    print("Nie udało się wczytać zmiennej OPENAI_API_KEY. Sprawdź konfigurację.")
+else:
+    print("Zmienne środowiskowa OPENAI_API_KEY została poprawnie załadowana.")
 client = openai.Client(api_key=OPENAI_API_KEY)
 
 # FastAPI setup
