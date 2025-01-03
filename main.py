@@ -7,13 +7,14 @@ import json
 
 app = FastAPI()
 
-# Konfiguracja loggera
-logger = logging.getLogger("uvicorn.access")
+# Konfiguracja loggera dla aplikacji
+logger = logging.getLogger("app_logger")
 logger.setLevel(logging.INFO)
 handler = logging.StreamHandler()
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
+logger.propagate = False  # Zapobiega podwójnemu logowaniu
 
 class Instruction(BaseModel):
     instruction: str
@@ -122,7 +123,7 @@ def process_map_instruction(instr: Instruction, apikey: Optional[str] = Header(N
 
     return {"description": description}
 
-# Opcjonalny endpoint bez ukośnika - wykorzystuje ten sam handler co /map/
+# Opcjonalny endpoint bez ukośnika
 @app.post("/map")
 def process_map_instruction_no_slash(instr: Instruction, apikey: Optional[str] = Header(None)):
     return process_map_instruction(instr, apikey)
