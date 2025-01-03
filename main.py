@@ -7,26 +7,29 @@ import json
 from dotenv import load_dotenv
 import os
 
-# Wczytywanie zmiennych środowiskowych
-load_dotenv()
+load_dotenv()  # Wczytuje zmienne z .env
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+print("Dostępne zmienne środowiskowe:")
+for key, value in os.environ.items():
+    print(f"{key}: {value}")
+print(os.environ)
+
+if not OPENAI_API_KEY:
+    print("Nie udało się wczytać zmiennej OPENAI_API_KEY. Sprawdź konfigurację.")
+else:
+    print("Zmienne środowiskowa OPENAI_API_KEY została poprawnie załadowana.")
+client = openai.Client(api_key=OPENAI_API_KEY)
+
+# FastAPI setup
+app = FastAPI()
 
 # Konfiguracja loggera
 logger = logging.getLogger("app_logger")
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)  # Zmieniono na DEBUG, aby logować więcej szczegółów
 handler = logging.StreamHandler()
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
-
-# Sprawdzanie klucza API
-if not OPENAI_API_KEY:
-    logger.error("Nie udało się wczytać zmiennej OPENAI_API_KEY. Sprawdź konfigurację.")
-else:
-    logger.info("Zmienne środowiskowa OPENAI_API_KEY została poprawnie załadowana.")
-
-# FastAPI setup
-app = FastAPI()
 
 # Model danych wejściowych
 class Instruction(BaseModel):
@@ -70,21 +73,18 @@ def generate_prompt(instruction: str) -> str:
 def ask_chatgpt_with_prompt(instruction: str) -> str:
     try:
         prompt = generate_prompt(instruction)
-        logger.info(f"Wysłanie prompta do OpenAI: {prompt}")
-        response = openai.ChatCompletion.create(
+        logger.info(f"Wysłanie prompta do OpenAI API: {prompt}")
+        response = client.chat_completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": "Jesteś asystentem pomagającym w nawigacji drona. Twoim zadaniem jest analiza mapy i opis miejsca, nad którym dron zawisł, na podstawie instrukcji lotu."},
                 {"role": "user", "content": prompt},
             ],
         )
-        logger.info(f"Otrzymana odpowiedź z OpenAI: {response}")
+        logger.debug(f"Odpowiedź z OpenAI API: {response}")
         answer = response['choices'][0]['message']['content'].strip()
-        logger.debug(f"Przetworzona odpowiedź: {answer}")
+        logger.info(f"Przetworzona odpowiedź: {answer}")
         return answer
-    except json.JSONDecodeError as json_error:
-        logger.error(f"Błąd dekodowania JSON: {json_error}")
-        return f"Błąd: {json_error}"
     except Exception as e:
         logger.error(f"Błąd komunikacji z OpenAI API: {e}")
         return f"Błąd: {e}"
@@ -107,7 +107,7 @@ def read_root():
 # Endpoint obsługujący mapę
 @app.post("/map/")
 def process_map_instruction(instr: Instruction, apikey: Optional[str] = Header(None)):
-    logger.info(f"Żądanie z instrukcją: {instr.instruction}")
+    logger.info(f"Żądanie otrzymane z instrukcją: {instr.instruction}")
     if apikey != API_KEY:
         logger.warning("Nieprawidłowy klucz API!")
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -120,8 +120,8 @@ def process_map_instruction(instr: Instruction, apikey: Optional[str] = Header(N
 
     try:
         result = json.loads(description)
-        logger.info(f"Przetworzona odpowiedź: {result}")
+        logger.info(f"Przetworzona odpowiedź JSON: {result}")
         return result
     except json.JSONDecodeError as json_error:
-        logger.error(f"Błąd dekodowania JSON z odpowiedzi: {json_error}")
+        logger.error(f"Błąd dekodowania JSON: {json_error}")
         raise HTTPException(status_code=500, detail=f"Błąd dekodowania JSON: {json_error}")
