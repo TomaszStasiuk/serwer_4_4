@@ -9,7 +9,9 @@ import os
 
 load_dotenv()  # Wczytuje zmienne z .env
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
+print("Dostępne zmienne środowiskowe:")
+for key, value in os.environ.items():
+    print(f"{key}: {value}")
 print(os.environ)
 
 if not OPENAI_API_KEY:
